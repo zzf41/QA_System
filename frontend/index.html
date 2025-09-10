@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>轻量化RAG知识库问答系统</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3B82F6',
+                        secondary: '#10B981',
+                        accent: '#8B5CF6',
+                        neutral: '#1F2937',
+                        'neutral-light': '#F3F4F6',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .content-auto {
+                content-visibility: auto;
+            }
+            .scrollbar-hide {
+                -ms-overflow-style: none;
+                scrollbar-width: none;
+            }
+            .scrollbar-hide::-webkit-scrollbar {
+                display: none;
+            }
+            .text-shadow {
+                text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-50 font-sans text-gray-800 min-h-screen flex flex-col">
+    <!-- 顶部导航栏 -->
+    <header class="bg-white shadow-md sticky top-0 z-50 transition-all duration-300">
+        <div class="container mx-auto px-4 py-3 flex justify-between items-center">
+            <div class="flex items-center space-x-2">
+                <i class="fa fa-database text-primary text-2xl"></i>
+                <h1 class="text-xl font-bold text-neutral">轻量化RAG知识库问答系统</h1>
+            </div>
+            <div class="flex items-center space-x-4">
+                <button id="settingsBtn" class="p-2 rounded-full hover:bg-gray-100 transition-colors">
+                    <i class="fa fa-cog text-gray-600"></i>
+                </button>
+                <button id="docsBtn" class="p-2 rounded-full hover:bg-gray-100 transition-colors">
+                    <i class="fa fa-file-text-o text-gray-600"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- 主内容区 -->
+    <main class="flex-grow container mx-auto px-4 py-6 flex flex-col lg:flex-row gap-6">
+        <!-- 左侧边栏 - 文档管理 -->
+        <aside id="documentsPanel" class="lg:w-1/4 bg-white rounded-lg shadow-md p-4 hidden lg:block">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-lg font-semibold">文档管理</h2>
+                <label for="fileUpload" class="cursor-pointer text-primary hover:text-primary/80 transition-colors">
+                    <i class="fa fa-plus-circle"></i> 上传文档
+                </label>
+                <input id="fileUpload" type="file" accept=".pdf" class="hidden" />
+            </div>
+            
+            <div class="border-t border-gray-200 pt-4">
+                <div class="relative">
+                    <input type="text" id="docSearch" placeholder="搜索文档..." 
+                        class="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary" />
+                    <i class="fa fa-search absolute left-3 top-3 text-gray-400"></i>
+                </div>
+                
+                <div id="documentsList" class="mt-4 max-h-[calc(100vh-300px)] overflow-y-auto scrollbar-hide space-y-2">
+                    <!-- 文档列表将通过JavaScript动态填充 -->
+                    <div class="text-center text-gray-500 py-8">
+                        <i class="fa fa-file-pdf-o text-4xl mb-2 opacity-30"></i>
+                        <p>尚未上传任何文档</p>
+                        <p class="text-sm mt-1">上传PDF文档以开始使用</p>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- 右侧主内容 - 问答区域 -->
+        <div class="lg:w-3/4 flex flex-col gap-6">
+            <!-- 问题输入区 -->
+            <div class="bg-white rounded-lg shadow-md p-4">
+                <h2 class="text-lg font-semibold mb-4">提问</h2>
+                <div class="flex flex-col gap-3">
+                    <textarea id="questionInput" rows="3" placeholder="请输入您的问题..." 
+                        class="w-full px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary resize-none"></textarea>
+                    <div class="flex justify-end">
+                        <button id="submitQuestion" class="bg-primary hover:bg-primary/90 text-white px-6 py-2 rounded-lg transition-colors flex items-center gap-2">
+                            <i class="fa fa-paper-plane"></i>
+                            <span>提交问题</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 答案展示区 -->
+            <div class="bg-white rounded-lg shadow-md p-4 flex-grow">
+                <h2 class="text-lg font-semibold mb-4">答案</h2>
+                <div id="answerContainer" class="min-h-[300px]">
+                    <div class="text-center text-gray-500 py-12">
+                        <i class="fa fa-comment-o text-4xl mb-2 opacity-30"></i>
+                        <p>提交问题后，答案将显示在这里</p>
+                    </div>
+                </div>
+
+                <!-- 引用来源 -->
+                <div id="referencesContainer" class="mt-6 hidden">
+                    <h3 class="font-semibold text-gray-700 mb-3 flex items-center">
+                        <i class="fa fa-bookmark-o mr-2 text-accent"></i>
+                        引用来源
+                    </h3>
+                    <div id="referencesList" class="space-y-4">
+                        <!-- 引用来源将通过JavaScript动态填充 -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- 移动端底部导航 -->
+    <div class="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg z-40">
+        <div class="flex justify-around">
+            <button id="mobileDocsBtn" class="flex flex-col items-center py-2 px-4 text-primary">
+                <i class="fa fa-file-text-o text-lg"></i>
+                <span class="text-xs mt-1">文档</span>
+            </button>
+            <button id="mobileHomeBtn" class="flex flex-col items-center py-2 px-4 text-gray-500">
+                <i class="fa fa-home text-lg"></i>
+                <span class="text-xs mt-1">首页</span>
+            </button>
+            <button id="mobileSettingsBtn" class="flex flex-col items-center py-2 px-4 text-gray-500">
+                <i class="fa fa-cog text-lg"></i>
+                <span class="text-xs mt-1">设置</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- 设置模态框 -->
+    <div id="settingsModal" class="fixed inset-0 bg-black/50 z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-md p-6 transform transition-all">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-bold">系统设置</h2>
+                <button id="closeSettingsBtn" class="text-gray-500 hover:text-gray-700">
+                    <i class="fa fa-times text-xl"></i>
+                </button>
+            </div>
+            
+            <form id="settingsForm" class="space-y-4">
+                <div>
+                    <label for="deepseekApiKey" class="block text-sm font-medium text-gray-700 mb-1">DeepSeek API 密钥</label>
+                    <input type="password" id="deepseekApiKey" 
+                        class="w-full px-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary" />
+                    <p class="text-xs text-gray-500 mt-1">获取API密钥：<a href="https://www.deepseek.com/" target="_blank" class="text-primary">DeepSeek官网</a></p>
+                </div>
+                
+                <div>
+                    <label for="topK" class="block text-sm font-medium text-gray-700 mb-1">检索相关片段数量</label>
+                    <input type="number" id="topK" min="1" max="10" value="3"
+                        class="w-full px-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary" />
+                    <p class="text-xs text-gray-500 mt-1">设置从文档中检索的相关片段数量</p>
+                </div>
+                
+                <div class="pt-2">
+                    <button type="submit" class="w-full bg-primary hover:bg-primary/90 text-white py-2 rounded-lg transition-colors">
+                        保存设置
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- 文档管理模态框（移动端） -->
+    <div id="mobileDocsModal" class="fixed inset-0 bg-white z-50 hidden flex flex-col">
+        <div class="border-b border-gray-200 p-4 flex justify-between items-center">
+            <h2 class="text-lg font-semibold">文档管理</h2>
+            <button id="closeMobileDocsBtn" class="text-gray-500 hover:text-gray-700 p-2">
+                <i class="fa fa-times text-xl"></i>
+            </button>
+        </div>
+        
+        <div class="p-4 flex-grow">
+            <label for="mobileFileUpload" class="cursor-pointer block text-center bg-primary/10 text-primary py-3 rounded-lg mb-4 hover:bg-primary/20 transition-colors">
+                <i class="fa fa-plus-circle mr-2"></i> 上传新文档
+            </label>
+            <input id="mobileFileUpload" type="file" accept=".pdf" class="hidden" />
+            
+            <div class="relative">
+                <input type="text" id="mobileDocSearch" placeholder="搜索文档..." 
+                    class="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary" />
+                <i class="fa fa-search absolute left-3 top-3 text-gray-400"></i>
+            </div>
+            
+            <div id="mobileDocumentsList" class="mt-4 overflow-y-auto scrollbar-hide flex-grow">
+                <!-- 文档列表将通过JavaScript动态填充 -->
+            </div>
+        </div>
+    </div>
+
+    <!-- 通知组件 -->
+    <div id="notification" class="fixed bottom-20 right-4 bg-gray-800 text-white px-4 py-3 rounded-lg shadow-lg transform translate-y-20 opacity-0 transition-all duration-300 flex items-center gap-2 z-50">
+        <i id="notificationIcon" class="fa fa-info-circle"></i>
+        <span id="notificationMessage"></span>
+    </div>
+
+    <script>
+        // API基础URL
+        const API_BASE_URL = '';
+        
+        // DOM元素
+        const elements = {
+            // 文档管理
+            fileUpload: document.getElementById('fileUpload'),
+            mobileFileUpload: document.getElementById('mobileFileUpload'),
+            documentsList: document.getElementById('documentsList'),
+            mobileDocumentsList: document.getElementById('mobileDocumentsList'),
+            docSearch: document.getElementById('docSearch'),
+            mobileDocSearch: document.getElementById('mobileDocSearch'),
+            
+            // 问答
+            questionInput: document.getElementById('questionInput'),
+            submitQuestion: document.getElementById('submitQuestion'),
+            answerContainer: document.getElementById('answerContainer'),
+            referencesContainer: document.getElementById('referencesContainer'),
+            referencesList: document.getElementById('referencesList'),
+            
+            // 设置
+            settingsBtn: document.getElementById('settingsBtn'),
+            mobileSettingsBtn: document.getElementById('mobileSettingsBtn'),
+            settingsModal: document.getElementById('settingsModal'),
+            closeSettingsBtn: document.getElementById('closeSettingsBtn'),
+            settingsForm: document.getElementById('settingsForm'),
+            deepseekApiKey: document.getElementById('deepseekApiKey'),
+            topK: document.getElementById('topK'),
+            
+            // 移动端文档模态框
+            docsBtn: document.getElementById('docsBtn'),
+            mobileDocsBtn: document.getElementById('mobileDocsBtn'),
+            mobileHomeBtn: document.getElementById('mobileHomeBtn'),
+            mobileDocsModal: document.getElementById('mobileDocsModal'),
+            closeMobileDocsBtn: document.getElementById('closeMobileDocsBtn'),
+            
+            // 通知
+            notification: document.getElementById('notification'),
+            notificationIcon: document.getElementById('notificationIcon'),
+            notificationMessage: document.getElementById('notificationMessage')
+        };
+        
+        // 显示通知
+        function showNotification(message, isError = false) {
+            elements.notificationMessage.textContent = message;
+            elements.notificationIcon.className = isError ? 'fa fa-exclamation-circle text-red-400' : 'fa fa-check-circle text-green-400';
+            elements.notification.classList.remove('translate-y-20', 'opacity-0');
+            elements.notification.classList.add('translate-y-0', 'opacity-100');
+            
+            setTimeout(() => {
+                elements.notification.classList.remove('translate-y-0', 'opacity-100');
+                elements.notification.classList.add('translate-y-20', 'opacity-0');
+            }, 3000);
+        }
+        
+        // 加载文档列表
+        async function loadDocuments() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/documents`);
+                if (!response.ok) throw new Error('获取文档列表失败');
+                
+                const data = await response.json();
+                
+                if (data.documents.length === 0) {
+                    elements.documentsList.innerHTML = `
+                        <div class="text-center text-gray-500 py-8">
+                            <i class="fa fa-file-pdf-o text-4xl mb-2 opacity-30"></i>
+                            <p>尚未上传任何文档</p>
+                            <p class="text-sm mt-1">上传PDF文档以开始使用</p>
+                        </div>
+                    `;
+                    elements.mobileDocumentsList.innerHTML = elements.documentsList.innerHTML;
+                    return;
+                }
+                
+                // 生成文档列表HTML
+                let docsHtml = '';
+                data.documents.forEach(doc => {
+                    const date = new Date(doc.created_at).toLocaleString();
+                    docsHtml += `
+                        <div class="flex items-center justify-between p-3 border border-gray-100 rounded-lg hover:bg-gray-50 transition-colors group">
+                            <div class="flex items-start gap-3">
+                                <i class="fa fa-file-pdf-o text-red-500 mt-1"></i>
+                                <div>
+                                    <h3 class="font-medium text-gray-800 truncate max-w-[200px]">${doc.filename}</h3>
+                                    <p class="text-xs text-gray-500 mt-1">
+                                        ${doc.page_count} 页 · ${formatFileSize(doc.size)} · ${date}
+                                    </p>
+                                </div>
+                            </div>
+                            <button class="delete-doc-btn opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-red-500 p-1" 
+                                data-id="${doc.id}">
+                                <i class="fa fa-trash-o"></i>
+                            </button>
+                        </div>
+                    `;
+                });
+                
+                elements.documentsList.innerHTML = docsHtml;
+                elements.mobileDocumentsList.innerHTML = docsHtml;
+                
+                // 添加删除文档事件监听
+                document.querySelectorAll('.delete-doc-btn').forEach(btn => {
+                    btn.addEventListener('click', async (e) => {
+                        e.stopPropagation();
+                        const docId = e.currentTarget.getAttribute('data-id');
+                        if (confirm('确定要删除这个文档吗？')) {
+                            await deleteDocument(docId);
+                        }
+                    });
+                });
+                
+            } catch (error) {
+                console.error('加载文档失败:', error);
+                showNotification('加载文档失败: ' + error.message, true);
+            }
+        }
+        
+        // 格式化文件大小
+        function formatFileSize(bytes) {
+            if (bytes < 1024) return bytes + ' B';
+            else if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+            else return (bytes / 1048576).toFixed(1) + ' MB';
+        }
+        
+        // 上传文档
+        async function uploadDocument(file) {
+            try {
+                if (!file || !file.name.toLowerCase().endsWith('.pdf')) {
+                    showNotification('请选择PDF文件', true);
+                    return;
+                }
+                
+                const formData = new FormData();
+                formData.append('file', file);
+                
+                const response = await fetch(`${API_BASE_URL}/api/documents`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!response.ok) {
+                    const error = await response.text();
+                    throw new Error(error || '上传文档失败');
+                }
+                
+                const data = await response.json();
+                showNotification(`文档 "${data.filename}" 上传成功`);
+                loadDocuments();
+                
+                // 清空文件输入
+                elements.fileUpload.value = '';
+                elements.mobileFileUpload.value = '';
+                
+            } catch (error) {
+                console.error('上传文档失败:', error);
+                showNotification('上传文档失败: ' + error.message, true);
+            }
+        }
+        
+        // 删除文档
+        async function deleteDocument(docId) {
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/documents/${docId}`, {
+                    method: 'DELETE'
+                });
+                
+                if (!response.ok) throw new Error('删除文档失败');
+                
+                const data = await response.json();
+                showNotification(data.message);
+                loadDocuments();
+                
+            } catch (error) {
+                console.error('删除文档失败:', error);
+                showNotification('删除文档失败: ' + error.message, true);
+            }
+        }
+        
+        // 提交问题
+        async function submitQuestion() {
+            const question = elements.questionInput.value.trim();
+            if (!question) {
+                showNotification('请输入问题', true);
+                return;
+            }
+            
+            try {
+                // 显示加载状态
+                elements.answerContainer.innerHTML = `
+                    <div class="text-center py-12">
+                        <i class="fa fa-circle-o-notch fa-spin text-4xl text-primary mb-2"></i>
+                        <p>正在生成答案...</p>
+                    </div>
+                `;
+                elements.referencesContainer.classList.add('hidden');
+                
+                const response = await fetch(`${API_BASE_URL}/api/queries`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ question })
+                });
+                
+                if (!response.ok) {
+                    const error = await response.text();
+                    throw new Error(error || '获取答案失败');
+                }
+                
+                const data = await response.json();
+                
+                // 显示答案
+                elements.answerContainer.innerHTML = `
+                    <div class="prose max-w-none">
+                        <h3 class="text-lg font-semibold mb-3">问题:</h3>
+                        <p class="text-gray-700 mb-4">${question}</p>
+                        <h3 class="text-lg font-semibold mb-3">答案:</h3>
+                        <div class="whitespace-pre-line text-gray-800">${data.answer}</div>
+                    </div>
+                `;
+                
+                // 显示引用来源
+                if (data.references && data.references.length > 0) {
+                    elements.referencesList.innerHTML = '';
+                    data.references.forEach((ref, index) => {
+                        elements.referencesList.innerHTML += `
+                            <div class="border border-gray-100 rounded-lg p-3 bg-gray-50">
+                                <div class="flex justify-between items-start mb-2">
+                                    <h4 class="font-medium text-gray-800">
+                                        来源 ${index + 1}: ${ref.filename} (第 ${ref.page_number} 页)
+                                    </h4>
+                                </div>
+                                <p class="text-sm text-gray-700 text-ellipsis line-clamp-3 hover:line-clamp-none transition-all duration-300">
+                                    ${ref.content}
+                                </p>
+                            </div>
+                        `;
+                    });
+                    elements.referencesContainer.classList.remove('hidden');
+                }
+                
+            } catch (error) {
+                console.error('提交问题失败:', error);
+                elements.answerContainer.innerHTML = `
+                    <div class="text-center text-red-500 py-12">
+                        <i class="fa fa-exclamation-circle text-4xl mb-2"></i>
+                        <p>获取答案失败: ${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+        
+        // 加载设置
+        async function loadSettings() {
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/settings`);
+                if (!response.ok) throw new Error('获取设置失败');
+                
+                const data = await response.json();
+                elements.deepseekApiKey.value = data.deepseek_api_key;
+                elements.topK.value = data.top_k;
+                
+            } catch (error) {
+                console.error('加载设置失败:', error);
+                showNotification('加载设置失败: ' + error.message, true);
+            }
+        }
+        
+        // 保存设置
+        async function saveSettings(e) {
+            e.preventDefault();
+            
+            try {
+                const settings = {
+                    deepseek_api_key: elements.deepseekApiKey.value,
+                    top_k: parseInt(elements.topK.value)
+                };
+                
+                const response = await fetch(`${API_BASE_URL}/api/settings`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(settings)
+                });
+                
+                if (!response.ok) {
+                    const error = await response.text();
+                    throw new Error(error || '保存设置失败');
+                }
+                
+                showNotification('设置保存成功');
+                elements.settingsModal.classList.remove('flex');
+                elements.settingsModal.classList.add('hidden');
+                
+            } catch (error) {
+                console.error('保存设置失败:', error);
+                showNotification('保存设置失败: ' + error.message, true);
+            }
+        }
+        
+        // 事件监听
+        function setupEventListeners() {
+            // 文档上传
+            elements.fileUpload.addEventListener('change', (e) => {
+                if (e.target.files.length > 0) {
+                    uploadDocument(e.target.files[0]);
+                }
+            });
+            
+            elements.mobileFileUpload.addEventListener('change', (e) => {
+                if (e.target.files.length > 0) {
+                    uploadDocument(e.target.files[0]);
+                }
+            });
+            
+            // 提交问题
+            elements.submitQuestion.addEventListener('click', submitQuestion);
+            
+            // 按Enter键提交问题（Shift+Enter换行）
+            elements.questionInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    submitQuestion();
+                }
+            });
+            
+            // 设置模态框
+            elements.settingsBtn.addEventListener('click', () => {
+                elements.settingsModal.classList.remove('hidden');
+                elements.settingsModal.classList.add('flex');
+            });
+            
+            elements.mobileSettingsBtn.addEventListener('click', () => {
+                elements.settingsModal.classList.remove('hidden');
+                elements.settingsModal.classList.add('flex');
+            });
+            
+            elements.closeSettingsBtn.addEventListener('click', () => {
+                elements.settingsModal.classList.remove('flex');
+                elements.settingsModal.classList.add('hidden');
+            });
+            
+            elements.settingsForm.addEventListener('submit', saveSettings);
+            
+            // 点击模态框外部关闭
+            elements.settingsModal.addEventListener('click', (e) => {
+                if (e.target === elements.settingsModal) {
+                    elements.settingsModal.classList.remove('flex');
+                    elements.settingsModal.classList.add('hidden');
+                }
+            });
+            
+            // 移动端文档模态框
+            elements.docsBtn.addEventListener('click', () => {
+                elements.mobileDocsModal.classList.remove('hidden');
+            });
+            
+            elements.mobileDocsBtn.addEventListener('click', () => {
+                elements.mobileDocsModal.classList.remove('hidden');
+            });
+            
+            elements.closeMobileDocsBtn.addEventListener('click', () => {
+                elements.mobileDocsModal.classList.add('hidden');
+            });
+            
+            elements.mobileHomeBtn.addEventListener('click', () => {
+                elements.mobileDocsModal.classList.add('hidden');
+            });
+            
+            // 文档搜索
+            elements.docSearch.addEventListener('input', filterDocuments);
+            elements.mobileDocSearch.addEventListener('input', filterDocuments);
+        }
+        
+        // 过滤文档
+        function filterDocuments(e) {
+            const searchTerm = e.target.value.toLowerCase();
+            const isMobile = e.target.id === 'mobileDocSearch';
+            const listContainer = isMobile ? elements.mobileDocumentsList : elements.documentsList;
+            const docs = listContainer.querySelectorAll('.flex.items-center.justify-between');
+            
+            docs.forEach(doc => {
+                const docName = doc.querySelector('h3').textContent.toLowerCase();
+                if (docName.includes(searchTerm)) {
+                    doc.style.display = 'flex';
+                } else {
+                    doc.style.display = 'none';
+                }
+            });
+        }
+        
+        // 初始化
+        async function init() {
+            setupEventListeners();
+            await loadDocuments();
+            await loadSettings();
+        }
+        
+        // 启动应用
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
